@@ -11,7 +11,7 @@ if(!require(ISLR)) {install.packages("ISLR"); require(ISLR)}
 if(!require(MASS)) {install.packages("MASS"); require(MASS)}
 if(!require(corrplot)) {install.packages("corrplot"); require(corrplot)}
 if(!require(caret)) {install.packages("caret"); require(caret)}
-loan_train <- data.table::fread("C:/Users/shrut/OneDrive/Documents/Loan Prediction/Train_data.csv")
+loan_train <- data.table::fread("C:\Users\shrut\OneDrive\Documents\GitHub\Loan-Prediction-Model/Train_data.csv")
 loan_train <- as.data.frame(loan_train)
 
 
