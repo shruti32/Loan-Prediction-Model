@@ -11,128 +11,164 @@ if(!require(ISLR)) {install.packages("ISLR"); require(ISLR)}
 if(!require(MASS)) {install.packages("MASS"); require(MASS)}
 if(!require(corrplot)) {install.packages("corrplot"); require(corrplot)}
 if(!require(caret)) {install.packages("caret"); require(caret)}
-loan_train <- data.table::fread("C:\Users\shrut\OneDrive\Documents\GitHub\Loan-Prediction-Model/Train_data.csv")
-loan_train <- as.data.frame(loan_train)
+if(!require(class)) {install.packages("class"); require(class)}
+if(!require(data.table)) {install.packages("data.table"); require(data.table)}
+if(!require(GGally)) {install.packages("GGally"); require(GGally)}
+loan_train <- fread("Train_data.csv")
+loan_train = loan_train[,-1]
 
 
-
-#Cleaning missing and duplicate values
+#Cleaning missing and duplicate data
 loan_train <- na.omit(loan_train)
 loan_train <- loan_train[!duplicated(loan_train),]
 loan_train$Loan_Status <- as.factor(loan_train$Loan_Status)
+str(loan_train)
+
+#Checking multicollinearity among variables
+loan_train_numeric <- select_if(loan_train, is.numeric)
+cor_matrix <- cor(loan_train_numeric) #As none of the correlations is close to 1, we can say that the 
+                                      #quantitative variables do not show collinearity.
+
+#Descriptive analysis
+summary(loan_train)
+sapply(loan_train, sd)
+
+pm <- ggpairs(loan_train, columns = c("Gender", "Married", "Dependents", "Education", "Self_Employed", "Loan_Status"))
+pm1 <- ggpairs(loan_train, columns = c("ApplicantIncome", "CoapplicantIncome", "LoanAmount", "Loan_Amount_Term", "Credit_History", "Loan_Status"))
+pm2 <- ggpairs(loan_train, columns = 11:12)
+pm
+pm1
+pm2
+
+
 
 #Splitting training and test data from Given Data
-set.seed(125)
-split <- sample.split(loan_train$Loan_Status, SplitRatio = .75)
-train_data <- subset(loan_train, split == TRUE)
-test_data <- subset(loan_train, split == FALSE)
+set.seed(123)
+index = sample(1:nrow(loan_train), size = .75*nrow(loan_train))
+train_data = loan_train[index,]
+validation_data = loan_train[-index,]
 
+#Full glm model
+glm_fit <- glm(Loan_Status ~ ., data = train_data, family = "binomial")
+summary(glm_fit)
 
-#Visualizing data
-str(train_data)
-num_cols <- c("Dependents", "ApplicantIncome", "CoapplicantIncome", "LoanAmount", "Loan_Amount_Term", 
-              "Credit_History")
-plot_box <- function(df, cols, col_x = "Loan_Status"){
-  options(repr.plot.width = 4, repr.plot.height = 3.5) #Set the initial plot area dimensions
-  for(col in cols){
-    p = ggplot(df, aes_string(col_x, col)) +
-      geom_boxplot() + 
-      ggtitle(paste('Box plot of', col, '\n vs.', col_x))
-    print(p)
-  }
-  
-}
+glm.probs = predict(glm.fit, validation_data, type = "response")
+glm.probs
+contrasts(validation_data$Loan_Status)
+dim(validation_data)
 
-plot_box(train_data, num_cols)
+glm.pred = rep("N", 133)
+glm.pred[glm.probs >.7] = "Y"
+glm.pred = as.factor(glm.pred)
+table(glm.pred, validation_data$Loan_Status)
+mean(glm.pred != validation_data$Loan_Status)
 
-plot_violin <- function(df, cols, col_x = "Loan_Status"){
-  options(repr.plot.width = 4, repr.plot.height = 3.5) #Set the initial plot area dimensions
-  for(col in cols){
-    p = ggplot(df, aes_string(col_x, col)) +
-      geom_violin() + 
-      ggtitle(paste('Violin plot of', col, '\n vs.', col_x))
-    print(p)
-  }
-  
-}
-
-plot_violin(train_data, num_cols)
-
-cat_cols <- c("Gender", "Married", "Education", "Self_Employed", "Property_Area")
-plot_bars <- function(df, cat_cols){
-  options(repr.plot.width = 6, repr.plot.height = 5)
-  temp1 = df[df$Loan_Status == 'N',]
-  temp2 = df[df$Loan_Status == 'Y',]
-  for(col in cat_cols){
-    p1 = ggplot(temp1, aes_string(col))+
-      geom_bar()+
-      ggtitle(paste('Bar plot of \n', col, 'for not approved loans'))+
-      theme(axis.text.x = element_text(angle = 90, hjust = 1))
-    p2 = ggplot(temp2, aes_string(col))+
-      geom_bar()+
-      ggtitle(paste('Bar plot of \n', col, 'for approved loans'))+
-      theme(axis.text.x = element_text(angle = 90, hjust = 1))
-    grid.arrange(p1, p2, nrow = 1)
-  }
-}
-
-plot_bars(train_data, cat_cols)
-
-##fitting a logistic regression model without some variables on the basis of Visualizations
-glm.fit <- glm(Loan_Status ~ ApplicantIncome + Loan_Amount_Term + Credit_History + Married + Property_Area + 
-                 CoapplicantIncome*LoanAmount, data = train_data, 
-               family = "binomial")
-summary(glm.fit)
-glm.probs <- predict(glm.fit, test_data, type = "response")
-glm.pred <- rep("N" ,133)
-glm.pred[glm.probs >.7] <- "Y"
-test_data$Loan_Status_Pred <- glm.pred
-table(glm.pred, test_data$Loan_Status)
-
-#Measure the model fitness
-test_data$Loan_Status_Pred <- as.factor(test_data$Loan_Status_Pred)
-str(test_data)
-pred<-prediction(as.numeric(test_data$Loan_Status_Pred), as.numeric(test_data$Loan_Status))
+pred<-prediction(as.numeric(glm.pred), as.numeric(validation_data$Loan_Status))
 perf<-performance(pred,"tpr", "fpr")
 plot(perf)
 auc<- performance(pred,"auc")
 auc
 
-##fitting a logistic regression model with all the variables
-glm.fit1 <- glm(Loan_Status ~ Dependents + ApplicantIncome + CoapplicantIncome + LoanAmount + Loan_Amount_Term + Credit_History
-               + Married + Education + Property_Area + Gender + Self_Employed + CoapplicantIncome*LoanAmount +
-                 ApplicantIncome*LoanAmount, 
-               data = train_data, family = "binomial")
-summary(glm.fit1)
-glm.probs1 <- predict(glm.fit1, test_data, type = "response")
-glm.pred1 <- rep("N" ,133)
-glm.pred1[glm.probs1 >.6] <- "Y"
-test_data$Loan_Status_Pred1 <- glm.pred1
-table(glm.pred1, test_data$Loan_Status)
+#Model with no predictors
+glm_nothing <- glm(Loan_Status ~ 1, data = train_data, family = "binomial")
+summary(glm_nothing)
 
-#Measure the model fitness
-test_data$Loan_Status_Pred1 <- as.factor(test_data$Loan_Status_Pred1)
-str(test_data)
-pred1<-prediction(as.numeric(test_data$Loan_Status_Pred1), as.numeric(test_data$Loan_Status))
-perf1<-performance(pred1,"tpr", "fpr")
-plot(perf1)
-auc<- performance(pred1,"auc")
-auc
+#Backward stepwise model
+glm_backward <- step(glm_fit)
+summary(glm_backward)
 
-##Knn approach
-loan_train <- loan_train[-1]
-library (class)
-set.seed(101)
+glm.probs_backward = predict(glm_backward, validation_data, type = "response")
+glm.pred_backward = rep("N", 133)
+glm.pred_backward[glm.probs_backward >.7] = "Y"
+glm.pred_backward = as.factor(glm.pred_backward)
+table(glm.pred_backward, validation_data$Loan_Status)
+mean(glm.pred_backward != validation_data$Loan_Status)
+pred_backward<-prediction(as.numeric(glm.pred_backward), as.numeric(validation_data$Loan_Status))
+perf_backward<-performance(pred_backward,"tpr", "fpr")
+plot(perf_backward)
+auc_backward<- performance(pred_backward,"auc")
+auc_backward
 
-#Partitioning the data into training and validation data
-index = createDataPartition(loan_train$Loan_Status, p = 0.7, list = F )
-train_knn = loan_train[index,]
-validation_knn = loan_train[-index,]
+#Forward stepwise model
+glm_forward <-  step(glm_nothing, scope=list(lower=formula(glm_nothing),upper=formula(glm_fit)), direction="forward")
+summary(glm_forward)
 
-# Setting levels for both training and validation data
-levels(train_knn$Loan_Status) <- make.names(levels(factor(train_knn$Loan_Status)))
-levels(validation_knn$Loan_Status) <- make.names(levels(factor(validation_knn$Loan_Status)))
+glm.probs_forward = predict(glm_forward, validation_data, type = "response")
+glm.pred_forward = rep("N", 133)
+glm.pred_forward[glm.probs_forward >.7] = "Y"
+glm.pred_forward = as.factor(glm.pred_forward)
+table(glm.pred_forward, validation_data$Loan_Status)
+mean(glm.pred_forward != validation_data$Loan_Status)
+pred_forward<-prediction(as.numeric(glm.pred_forward), as.numeric(validation_data$Loan_Status))
+perf_forward<-performance(pred_forward,"tpr", "fpr")
+plot(perf_forward)
+auc_forward<- performance(pred_forward,"auc")
+auc_forward
 
+#bothways model
+glm_bothways = step(glm_nothing, list(lower=formula(glm_nothing),upper=formula(glm_fit)), direction="both", trace = 0)
+summary(glm_bothways)
+
+glm.probs_bothways = predict(glm_bothways, validation_data, type = "response")
+glm.pred_bothways = rep("N", 133)
+glm.pred_bothways[glm.probs_bothways >.7] = "Y"
+glm.pred_bothways = as.factor(glm.pred_bothways)
+table(glm.pred_bothways, validation_data$Loan_Status)
+mean(glm.pred_bothways != validation_data$Loan_Status)
+pred_bothways<-prediction(as.numeric(glm.pred_bothways), as.numeric(validation_data$Loan_Status))
+perf_bothways<-performance(pred_bothways,"tpr", "fpr")
+plot(perf_bothways)
+auc_bothways<- performance(pred_bothways,"auc")
+auc_bothways
+
+#Model with non-linear transformation
+glm_nl_fit <- glm(Loan_Status ~ Credit_History + Property_Area + I(Credit_History^2), data = train_data, family = "binomial")
+summary(glm_nl_fit)
+
+glm.probs_nl = predict(glm_nl_fit, validation_data, type = "response")
+glm.pred_nl = rep("N", 133)
+glm.pred_nl[glm.probs_nl >.7] = "Y"
+glm.pred_nl = as.factor(glm.pred_nl)
+table(glm.pred_nl, validation_data$Loan_Status)
+mean(glm.pred_nl != validation_data$Loan_Status)
+pred_nl<-prediction(as.numeric(glm.pred_nl), as.numeric(validation_data$Loan_Status))
+perf_nl<-performance(pred_nl,"tpr", "fpr")
+plot(perf_nl)
+auc_nl<- performance(pred_nl,"auc")
+auc_nl
+
+#Model with interaction term
+glm_int_fit <- glm(Loan_Status ~ Credit_History + Property_Area + Credit_History:Property_Area, data = train_data, family = "binomial")
+summary(glm_int_fit)
+glm.probs_int = predict(glm_int_fit, validation_data, type = "response")
+glm.pred_int = rep("N", 133)
+glm.pred_int[glm.probs_int >.7] = "Y"
+glm.pred_int = as.factor(glm.pred_int)
+table(glm.pred_int, validation_data$Loan_Status)
+mean(glm.pred_int != validation_data$Loan_Status)
+pred_int<-prediction(as.numeric(glm.pred_int), as.numeric(validation_data$Loan_Status))
+perf_int<-performance(pred_int,"tpr", "fpr")
+plot(perf_int)
+auc_int<- performance(pred_int,"auc")
+auc_int
+
+##knn approach using knn function
+#Converting all predictors to numeric
+loan_train$Property_Area <- as.numeric(as.factor(loan_train$Property_Area))
+train_knn = cbind(loan_train$Credit_History, loan_train$Property_Area)[index,]
+test_knn = cbind(loan_train$Credit_History, loan_train$Property_Area)[-index,]
+train.Loan_Status <- loan_train$Loan_Status[index]
+
+set.seed(1)
+knn.pred = knn(train = train_knn, test = test_knn, cl = train.Loan_Status, k=1)
+table(knn.pred, validation_data$Loan_Status)
+pred_knn<-prediction(as.numeric(knn.pred), as.numeric(validation_data$Loan_Status))
+perf_knn<-performance(pred_knn,"tpr", "fpr")
+plot(perf_knn)
+auc_knn<- performance(pred_knn,"auc")
+auc_knn
+
+##knn approach using caret
 # Setting up train controls
 repeats = 3
 numbers = 10
@@ -145,7 +181,7 @@ x = trainControl(method = 'repeatedcv',
                  classProbs = TRUE,
                  summaryFunction = twoClassSummary)
 
-model1 <- train(Loan_Status~. , data = train_knn, method = 'knn',
+model1 <- train(Loan_Status~Credit_History+Property_Area , data = train_data, method = 'knn',
                 preProcess = c('center','scale'),
                 trControl = x,
                 metric = 'ROC',
@@ -156,11 +192,11 @@ model1
 plot(model1)
 
 # Validation
-valid_pred <- predict(model1,validation_knn, type = 'prob')
+valid_pred <- predict(model1, validation_data, type = 'prob')
 
 #Storing Model Performance Scores
 library(ROCR)
-pred_val <-prediction(valid_pred[,2],validation_knn$Loan_Status)
+pred_val <-prediction(valid_pred[,2],validation_data$Loan_Status)
 
 # Calculating Area under Curve (AUC)
 perf_val <- performance(pred_val,'auc')
@@ -184,4 +220,3 @@ valid_pred <- predict(model1,loan_test, type = 'prob')
 knn.pred <- rep("N" ,328)
 knn.pred[valid_pred[,2] >.7] <- "Y"
 loan_test$Loan_Status_Pred <- knn.pred
-
