@@ -14,6 +14,8 @@ if(!require(caret)) {install.packages("caret"); require(caret)}
 if(!require(class)) {install.packages("class"); require(class)}
 if(!require(data.table)) {install.packages("data.table"); require(data.table)}
 if(!require(GGally)) {install.packages("GGally"); require(GGally)}
+if(!require(car)) {install.packages("car"); require(car)}
+if(!require(outliers)) {install.packages("outliers"); require(outliers)}
 loan_train <- fread("Train_data.csv")
 loan_train = loan_train[,-1]
 
@@ -40,7 +42,22 @@ pm
 pm1
 pm2
 
+#As we can in pm1 there is only one appticant having high income and still no approved loan.
+#This is an outlier and we can remove this as an applicant with high income will have less chances of not
+#getting his loan approved.
 
+#to remove the outliers we will use the fact that an observation which lies beyond 3 standard deviations
+#from the mean is considered to be an outlier.
+
+#outlier for applicant income
+app_income_out <- mean(loan_train$ApplicantIncome)+3*sd(loan_train$ApplicantIncome)
+app_income_out
+
+#we will remove any observation with applicantincome greater than 24720.22 and not approved loan
+loan_train_out <- filter(loan_train, ApplicantIncome > 24720.22 & Loan_Status == "N")
+View(loan_train_out)
+loan_train <- anti_join(loan_train, loan_train_out)
+View(loan_train)
 
 #Splitting training and test data from Given Data
 set.seed(123)
@@ -57,7 +74,7 @@ glm.probs
 contrasts(validation_data$Loan_Status)
 dim(validation_data)
 
-glm.pred = rep("N", 133)
+glm.pred = rep("N", 132)
 glm.pred[glm.probs >.7] = "Y"
 glm.pred = as.factor(glm.pred)
 table(glm.pred, validation_data$Loan_Status)
@@ -78,7 +95,7 @@ glm_backward <- step(glm_fit)
 summary(glm_backward)
 
 glm.probs_backward = predict(glm_backward, validation_data, type = "response")
-glm.pred_backward = rep("N", 133)
+glm.pred_backward = rep("N", 132)
 glm.pred_backward[glm.probs_backward >.7] = "Y"
 glm.pred_backward = as.factor(glm.pred_backward)
 table(glm.pred_backward, validation_data$Loan_Status)
@@ -94,7 +111,7 @@ glm_forward <-  step(glm_nothing, scope=list(lower=formula(glm_nothing),upper=fo
 summary(glm_forward)
 
 glm.probs_forward = predict(glm_forward, validation_data, type = "response")
-glm.pred_forward = rep("N", 133)
+glm.pred_forward = rep("N", 132)
 glm.pred_forward[glm.probs_forward >.7] = "Y"
 glm.pred_forward = as.factor(glm.pred_forward)
 table(glm.pred_forward, validation_data$Loan_Status)
@@ -110,7 +127,7 @@ glm_bothways = step(glm_nothing, list(lower=formula(glm_nothing),upper=formula(g
 summary(glm_bothways)
 
 glm.probs_bothways = predict(glm_bothways, validation_data, type = "response")
-glm.pred_bothways = rep("N", 133)
+glm.pred_bothways = rep("N", 132)
 glm.pred_bothways[glm.probs_bothways >.7] = "Y"
 glm.pred_bothways = as.factor(glm.pred_bothways)
 table(glm.pred_bothways, validation_data$Loan_Status)
@@ -126,7 +143,7 @@ glm_nl_fit <- glm(Loan_Status ~ Credit_History + Property_Area + I(Credit_Histor
 summary(glm_nl_fit)
 
 glm.probs_nl = predict(glm_nl_fit, validation_data, type = "response")
-glm.pred_nl = rep("N", 133)
+glm.pred_nl = rep("N", 132)
 glm.pred_nl[glm.probs_nl >.7] = "Y"
 glm.pred_nl = as.factor(glm.pred_nl)
 table(glm.pred_nl, validation_data$Loan_Status)
@@ -141,7 +158,7 @@ auc_nl
 glm_int_fit <- glm(Loan_Status ~ Credit_History + Property_Area + Credit_History:Property_Area, data = train_data, family = "binomial")
 summary(glm_int_fit)
 glm.probs_int = predict(glm_int_fit, validation_data, type = "response")
-glm.pred_int = rep("N", 133)
+glm.pred_int = rep("N", 132)
 glm.pred_int[glm.probs_int >.7] = "Y"
 glm.pred_int = as.factor(glm.pred_int)
 table(glm.pred_int, validation_data$Loan_Status)
