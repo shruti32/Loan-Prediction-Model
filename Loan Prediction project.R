@@ -16,14 +16,36 @@ if(!require(data.table)) {install.packages("data.table"); require(data.table)}
 if(!require(GGally)) {install.packages("GGally"); require(GGally)}
 if(!require(car)) {install.packages("car"); require(car)}
 if(!require(outliers)) {install.packages("outliers"); require(outliers)}
-loan_train <- fread("Train_data.csv")
+if(!require(rapportools)) {install.packages("rapportools"); require(rapportools)}
+loan_train <- fread("Train_data.csv", na.string = "NA", stringsAsFactors = TRUE)
 loan_train = loan_train[,-1]
 
+##percentage of missing values in each columns, so we can decide whether to remove missing values or not
+#missing values in columns other than credit history
+missing_data <- colMeans(is.empty(loan_train[,-c("Dependents", "Credit_History")]))
+View(missing_data)
+
+#Credit_History has 2 values (0 and 1) there 0 will not be considered as an empty value for credit history
+missing_credit_history <- mean(is.na(loan_train$Credit_History))
+View(missing_credit_history) #8 percent missing values
+missing_dependents <- mean(is.na(loan_train$Dependents))
+View(missing_dependents) #0 missing values
+
+#As we can see 44 percentage of the coapplicant income data is missing, so we cannot remove this as we might
+#loose important data
+#before cleaning missing values we will assign 1 where coapplicant income in 0
+#loan_train[which(loan_train[,7] == 0), 7] <- 1
+#loan_train[which(loan_train[,1] == ""), 1] <- "TG"
+#loan_train[which(loan_train[,2] == ""), 2] <- "ND"
+#loan_train[which(is.na(loan_train[,3])), 3] <- 0
+#loan_train[which(loan_train[,5] == ""), 5] <- "ND"
+#loan_train[which(loan_train[,5] == ""), 5] <- "ND"
+#loan_train[which(loan_train[,8] == c("","NA")), 8] <- 0
 
 #Cleaning missing and duplicate data
 loan_train <- na.omit(loan_train)
 loan_train <- loan_train[!duplicated(loan_train),]
-loan_train$Loan_Status <- as.factor(loan_train$Loan_Status)
+#loan_train$Loan_Status <- as.factor(loan_train$Loan_Status)
 str(loan_train)
 
 #Checking multicollinearity among variables
@@ -50,14 +72,14 @@ pm2
 #from the mean is considered to be an outlier.
 
 #outlier for applicant income
-app_income_out <- mean(loan_train$ApplicantIncome)+3*sd(loan_train$ApplicantIncome)
-app_income_out
+#app_income_out <- mean(loan_train$ApplicantIncome)+3*sd(loan_train$ApplicantIncome)
+#app_income_out
 
 #we will remove any observation with applicantincome greater than 24720.22 and not approved loan
-loan_train_out <- filter(loan_train, ApplicantIncome > 24720.22 & Loan_Status == "N")
-View(loan_train_out)
-loan_train <- anti_join(loan_train, loan_train_out)
-View(loan_train)
+#loan_train_out <- filter(loan_train, ApplicantIncome > 24720.22 & Loan_Status == "N")
+#loan_train_out1 <- filter(loan_train_out, ApplicantIncome == 33846)
+#View(loan_train_out1)
+#loan_train <- anti_join(loan_train, loan_train_out1)
 
 #Splitting training and test data from Given Data
 set.seed(123)
@@ -70,7 +92,6 @@ glm_fit <- glm(Loan_Status ~ ., data = train_data, family = "binomial")
 summary(glm_fit)
 
 glm.probs = predict(glm.fit, validation_data, type = "response")
-glm.probs
 contrasts(validation_data$Loan_Status)
 dim(validation_data)
 
