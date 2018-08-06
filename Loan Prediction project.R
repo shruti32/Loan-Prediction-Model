@@ -17,6 +17,7 @@ if(!require(GGally)) {install.packages("GGally"); require(GGally)}
 if(!require(car)) {install.packages("car"); require(car)}
 if(!require(outliers)) {install.packages("outliers"); require(outliers)}
 if(!require(rapportools)) {install.packages("rapportools"); require(rapportools)}
+if(!require(boot)) {install.packages("boot"); require(boot)}
 loan_train <- fread("Train_data.csv", na.string = "NA", stringsAsFactors = TRUE)
 loan_train = loan_train[,-1]
 
@@ -95,7 +96,7 @@ glm.probs = predict(glm.fit, validation_data, type = "response")
 contrasts(validation_data$Loan_Status)
 dim(validation_data)
 
-glm.pred = rep("N", 132)
+glm.pred = rep("N", 133)
 glm.pred[glm.probs >.7] = "Y"
 glm.pred = as.factor(glm.pred)
 table(glm.pred, validation_data$Loan_Status)
@@ -107,6 +108,13 @@ plot(perf)
 auc<- performance(pred,"auc")
 auc
 
+#LOOCV 
+cv.err <- cv.glm(validation_data, glm.fit)
+cv.err$delta
+
+set.seed(1)
+cv.err.6 <- cv.glm(validation_data, glm.fit, K = 6)
+cv.err.6$delta
 #Model with no predictors
 glm_nothing <- glm(Loan_Status ~ 1, data = train_data, family = "binomial")
 summary(glm_nothing)
@@ -116,7 +124,7 @@ glm_backward <- step(glm_fit)
 summary(glm_backward)
 
 glm.probs_backward = predict(glm_backward, validation_data, type = "response")
-glm.pred_backward = rep("N", 132)
+glm.pred_backward = rep("N", 133)
 glm.pred_backward[glm.probs_backward >.7] = "Y"
 glm.pred_backward = as.factor(glm.pred_backward)
 table(glm.pred_backward, validation_data$Loan_Status)
@@ -127,12 +135,19 @@ plot(perf_backward)
 auc_backward<- performance(pred_backward,"auc")
 auc_backward
 
+#LOOCV 
+cv.err <- cv.glm(validation_data, glm_backward)
+cv.err$delta
+
+set.seed(1)
+cv.err.6 <- cv.glm(validation_data, glm_backward, K = 6)
+cv.err.6$delta
 #Forward stepwise model
 glm_forward <-  step(glm_nothing, scope=list(lower=formula(glm_nothing),upper=formula(glm_fit)), direction="forward")
 summary(glm_forward)
 
 glm.probs_forward = predict(glm_forward, validation_data, type = "response")
-glm.pred_forward = rep("N", 132)
+glm.pred_forward = rep("N", 133)
 glm.pred_forward[glm.probs_forward >.7] = "Y"
 glm.pred_forward = as.factor(glm.pred_forward)
 table(glm.pred_forward, validation_data$Loan_Status)
@@ -143,12 +158,20 @@ plot(perf_forward)
 auc_forward<- performance(pred_forward,"auc")
 auc_forward
 
+#LOOCV 
+cv.err <- cv.glm(validation_data, glm_forward)
+cv.err$delta
+
+set.seed(1)
+cv.err.6 <- cv.glm(validation_data, glm_forward, K = 6)
+cv.err.6$delta
+
 #bothways model
 glm_bothways = step(glm_nothing, list(lower=formula(glm_nothing),upper=formula(glm_fit)), direction="both", trace = 0)
 summary(glm_bothways)
 
 glm.probs_bothways = predict(glm_bothways, validation_data, type = "response")
-glm.pred_bothways = rep("N", 132)
+glm.pred_bothways = rep("N", 133)
 glm.pred_bothways[glm.probs_bothways >.7] = "Y"
 glm.pred_bothways = as.factor(glm.pred_bothways)
 table(glm.pred_bothways, validation_data$Loan_Status)
@@ -159,6 +182,13 @@ plot(perf_bothways)
 auc_bothways<- performance(pred_bothways,"auc")
 auc_bothways
 
+#LOOCV 
+cv.err <- cv.glm(validation_data, glm_bothways)
+cv.err$delta
+
+set.seed(1)
+cv.err.6 <- cv.glm(validation_data, glm_bothways, K = 6)
+cv.err.6$delta
 #Model with non-linear transformation
 glm_nl_fit <- glm(Loan_Status ~ Credit_History + Property_Area + I(Credit_History^2), data = train_data, family = "binomial")
 summary(glm_nl_fit)
@@ -175,6 +205,14 @@ plot(perf_nl)
 auc_nl<- performance(pred_nl,"auc")
 auc_nl
 
+#LOOCV 
+cv.err <- cv.glm(validation_data, glm_nl_fit)
+cv.err$delta
+
+set.seed(1)
+cv.err.6 <- cv.glm(validation_data, glm_nl_fit, K = 6)
+cv.err.6$delta
+
 #Model with interaction term
 glm_int_fit <- glm(Loan_Status ~ Credit_History + Property_Area + Credit_History:Property_Area, data = train_data, family = "binomial")
 summary(glm_int_fit)
@@ -189,6 +227,14 @@ perf_int<-performance(pred_int,"tpr", "fpr")
 plot(perf_int)
 auc_int<- performance(pred_int,"auc")
 auc_int
+
+#LOOCV 
+cv.err <- cv.glm(validation_data, glm_int_fit)
+cv.err$delta
+
+set.seed(1)
+cv.err.6 <- cv.glm(validation_data, glm_int_fit, K = 6)
+cv.err.6$delta
 
 ##knn approach using knn function
 #Converting all predictors to numeric
@@ -243,7 +289,6 @@ perf_val
 # Plot AUC
 perf_val <- performance(pred_val, 'tpr', 'fpr')
 plot(perf_val, col = 'green', lwd = 1.5)
-
 
 ##Validation on the given test set using knn model
 #KNN model with two predictors (Credit_History and Property_Area) and for k=23 resulted in the 
