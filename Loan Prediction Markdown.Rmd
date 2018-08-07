@@ -13,7 +13,7 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Loan Prediction Problem {Source: https://datahack.analyticsvidhya.com/contest/practice-problem-loan-prediction-iii/}
+## Loan Prediction Problem {Source: https://datahack.analyticsvidhya.com/contest/practice-problem-loan-prediction-iii/
 
 Problem Statement
 
