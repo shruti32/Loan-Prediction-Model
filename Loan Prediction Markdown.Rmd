@@ -44,7 +44,7 @@ if(!require(boot)) {install.packages("boot"); require(boot)}
 ## Loading Data
 
 ```{r Data, echo=TRUE}
-loan_train <- fread("Train_data.csv", na.string = c("NA",""), stringsAsFactors = TRUE)
+loan_train <- fread("Train_data.csv", na.string = "NA", stringsAsFactors = TRUE)
 loan_train = loan_train[,-1]
 head(loan_train)
 ```
@@ -114,7 +114,7 @@ summary(glm_fit)
 glm.probs = predict(glm.fit, validation_data, type = "response")
 contrasts(validation_data$Loan_Status)
 dim(validation_data)
-glm.pred = rep("N", 120)
+glm.pred = rep("N", 133)
 glm.pred[glm.probs >.7] = "Y"
 glm.pred = as.factor(glm.pred)
 table(glm.pred, validation_data$Loan_Status)
@@ -139,7 +139,7 @@ summary(glm_nothing)
 glm_backward <- step(glm_fit)
 summary(glm_backward)
 glm.probs_backward = predict(glm_backward, validation_data, type = "response")
-glm.pred_backward = rep("N", 120)
+glm.pred_backward = rep("N", 133)
 glm.pred_backward[glm.probs_backward >.7] = "Y"
 glm.pred_backward = as.factor(glm.pred_backward)
 table(glm.pred_backward, validation_data$Loan_Status)
@@ -154,7 +154,7 @@ auc_backward
 glm_forward <-  step(glm_nothing, scope=list(lower=formula(glm_nothing),upper=formula(glm_fit)), direction="forward")
 summary(glm_forward)
 glm.probs_forward = predict(glm_forward, validation_data, type = "response")
-glm.pred_forward = rep("N", 120)
+glm.pred_forward = rep("N", 133)
 glm.pred_forward[glm.probs_forward >.7] = "Y"
 glm.pred_forward = as.factor(glm.pred_forward)
 table(glm.pred_forward, validation_data$Loan_Status)
@@ -169,7 +169,7 @@ auc_forward
 glm_bothways = step(glm_nothing, list(lower=formula(glm_nothing),upper=formula(glm_fit)), direction="both", trace = 0)
 summary(glm_bothways)
 glm.probs_bothways = predict(glm_bothways, validation_data, type = "response")
-glm.pred_bothways = rep("N", 120)
+glm.pred_bothways = rep("N", 133)
 glm.pred_bothways[glm.probs_bothways >.7] = "Y"
 glm.pred_bothways = as.factor(glm.pred_bothways)
 table(glm.pred_bothways, validation_data$Loan_Status)
@@ -188,7 +188,7 @@ As you can see from all the above models, the predictors which are significant i
 glm_nl_fit <- glm(Loan_Status ~ Credit_History + Property_Area + I(Credit_History^2), data = train_data, family = "binomial")
 summary(glm_nl_fit)
 glm.probs_nl = predict(glm_nl_fit, validation_data, type = "response")
-glm.pred_nl = rep("N", 120)
+glm.pred_nl = rep("N", 133)
 glm.pred_nl[glm.probs_nl >.7] = "Y"
 glm.pred_nl = as.factor(glm.pred_nl)
 table(glm.pred_nl, validation_data$Loan_Status)
@@ -203,7 +203,7 @@ auc_nl
 glm_int_fit <- glm(Loan_Status ~ Credit_History + Property_Area + Credit_History:Property_Area, data = train_data, family = "binomial")
 summary(glm_int_fit)
 glm.probs_int = predict(glm_int_fit, validation_data, type = "response")
-glm.pred_int = rep("N", 120)
+glm.pred_int = rep("N", 133)
 glm.pred_int[glm.probs_int >.7] = "Y"
 glm.pred_int = as.factor(glm.pred_int)
 table(glm.pred_int, validation_data$Loan_Status)
@@ -255,7 +255,7 @@ perf_val <- performance(pred_val, 'tpr', 'fpr')
 plot(perf_val, col = 'green', lwd = 1.5)
 ```
 
-The GLM model using caret function gives the maximum AUC (.78) among all the GLMs.
+The GLM model using caret function gives the maximum AUC (.82) among all the GLMs.
 
 Now we will develop knn model using knn function and knn model using caret package and compare their AUC with the GLM model developed using caret package.
 
@@ -313,7 +313,7 @@ perf_val2 <- performance(pred_val2, 'tpr', 'fpr')
 plot(perf_val2, col = 'green', lwd = 1.5)
 ```
 
-The AUC of KNN model using knn() function is same as that of full GLM model (.75). The AUC of KNN model using caret package is same as that of GLM model developed using caret package.
+The AUC of KNN model using knn() function is same as that of full GLM model (.74). The AUC of KNN model using caret package is same as that of GLM model developed using caret package (.82).
 
 Now we can use any one of the GLM model or KNN model using caret package to predict the Loan_Status of the given test data. Here we are using KNN model.
 
