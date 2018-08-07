@@ -1,8 +1,12 @@
 ---
 title: "Loan Prediction"
 author: "Shruti"
-date: "July 31, 2018"
-output: word_document
+date: "August 7, 2018"
+output:
+  word_document: default
+  pdf_document: default
+  html_document:
+    df_print: paged
 ---
 
 ```{r setup, include=FALSE}
@@ -11,20 +15,315 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## R Markdown
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+Installing and loading packages
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r packages, echo=TRUE}
+if(!require(dplyr)) {install.packages("dplyr"); require(dplyr)}
+if(!require(grid)) {install.packages("grid"); require(grid)}
+if(!require(ggplot2)) {install.packages("ggplot2"); require(ggplot2)}
+if(!require(lattice)) {install.packages("lattice"); require(lattice)}
+if(!require(gridExtra)) {install.packages("gridExtra"); require(gridExtra)}
+if(!require(tidyselect)) {install.packages("tidyselect"); require(tidyselect)}
+if(!require(caTools)) {install.packages("caTools"); require(caTools)}
+if(!require(nnet)) {install.packages("nnet"); require(nnet)}
+if(!require(ROCR)) {install.packages("ROCR"); require(ROCR)}
+if(!require(ISLR)) {install.packages("ISLR"); require(ISLR)}
+if(!require(MASS)) {install.packages("MASS"); require(MASS)}
+if(!require(corrplot)) {install.packages("corrplot"); require(corrplot)}
+if(!require(caret)) {install.packages("caret"); require(caret)}
+if(!require(class)) {install.packages("class"); require(class)}
+if(!require(data.table)) {install.packages("data.table"); require(data.table)}
+if(!require(GGally)) {install.packages("GGally"); require(GGally)}
+if(!require(car)) {install.packages("car"); require(car)}
+if(!require(outliers)) {install.packages("outliers"); require(outliers)}
+if(!require(rapportools)) {install.packages("rapportools"); require(rapportools)}
+if(!require(boot)) {install.packages("boot"); require(boot)}
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
+## Loading Data
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r Data, echo=TRUE}
+loan_train <- fread("Train_data.csv", na.string = c("NA",""), stringsAsFactors = TRUE)
+loan_train = loan_train[,-1]
+head(loan_train)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+## Missing values
+
+Percentage of missing values in each columns, so we can decide whether to remove missing values or not
+Here we are finding missing value percentage in columns other than Credit_History and Dependents
+
+```{r Missing values analysis, echo=TRUE}
+missing_data <- colMeans(is.empty(loan_train[,-c("Dependents", "Credit_History")]))
+missing_data
+```
+
+For this data Credit_History and Dependents, 0 can't be considered as a missing value
+
+```{r Missing values, echo=TRUE}
+missing_credit_history <- mean(is.na(loan_train$Credit_History))
+missing_dependents <- mean(is.na(loan_train$Dependents))
+missing_credit_history
+missing_dependents
+```
+
+After including the missing values the AUC went down therefore we removed the missing and empty values from the data
+
+## Cleaning missing and duplicate values
+```{r Cleaning Data, echo=TRUE}
+loan_train <- na.omit(loan_train)
+loan_train <- loan_train[!duplicated(loan_train),]
+str(loan_train)
+```
+
+## Pairs Plot
+
+```{r Descriptive Analysis, echo=TRUE}
+summary(loan_train)
+sapply(loan_train, sd)
+
+pm <- ggpairs(loan_train, columns = c("Gender", "Married", "Dependents", "Education", "Self_Employed", "Loan_Status"))
+pm1 <- ggpairs(loan_train, columns = c("ApplicantIncome", "CoapplicantIncome", "LoanAmount", "Loan_Amount_Term", "Credit_History", "Loan_Status"))
+pm2 <- ggpairs(loan_train, columns = 11:12)
+pm
+pm1
+pm2
+```
+
+As none of the correlations is close to 1, we can say that the quantitative variables do not show collinearity.
+As we can see from the above paired plots, there are some variables which does not have high impact on the loan status, and these are ApplicantIncome, Loan_Amount_Term and Property_Area. Now we will fit a logistic regression model with all the variables and analyse the coefficients and verify that whether our descriptive analysis is in line with our model. We will split the data into training and test sets, with training set containing 75% of the observations and the test set containing 25% of the observations.
+
+## Splitting data
+
+```{r Split, echo = TRUE}
+set.seed(123)
+index = sample(1:nrow(loan_train), size = .75*nrow(loan_train))
+train_data = loan_train[index,]
+validation_data = loan_train[-index,]
+```
+
+## GLM Models
+
+Here we are creating all the GLM models along with calculating their AUC
+
+```{r GLM, echo=TRUE}
+#Full glm model
+glm_fit <- glm(Loan_Status ~ ., data = train_data, family = "binomial")
+summary(glm_fit)
+glm.probs = predict(glm.fit, validation_data, type = "response")
+contrasts(validation_data$Loan_Status)
+dim(validation_data)
+glm.pred = rep("N", 120)
+glm.pred[glm.probs >.7] = "Y"
+glm.pred = as.factor(glm.pred)
+table(glm.pred, validation_data$Loan_Status)
+mean(glm.pred != validation_data$Loan_Status)
+pred<-prediction(as.numeric(glm.pred), as.numeric(validation_data$Loan_Status))
+perf<-performance(pred,"tpr", "fpr")
+plot(perf)
+auc<- performance(pred,"auc")
+auc
+```
+
+As we can see from the summary of the above model, the variables which are significant in the prediction of the loan status are Credit_History and Property_Area. Now we will carry out the stepwise regression to check the significance of other predictors. To carry out the backwards stepwise regression, we will use the glm_fit model and do a stepwise regression on it. To carry out the forward stepwise regression, we will develop a linear regression model with no predictors and then carry out the stepwise regression between the model with no predictors and glm_fit. We will also carry out a stepwise regression bothways.
+
+##Modifications is GLM
+
+```{r Stepwise GLM, echo = TRUE}
+#Model with no predictors
+glm_nothing <- glm(Loan_Status ~ 1, data = train_data, family = "binomial")
+summary(glm_nothing)
+
+#Backward stepwise model
+glm_backward <- step(glm_fit)
+summary(glm_backward)
+glm.probs_backward = predict(glm_backward, validation_data, type = "response")
+glm.pred_backward = rep("N", 120)
+glm.pred_backward[glm.probs_backward >.7] = "Y"
+glm.pred_backward = as.factor(glm.pred_backward)
+table(glm.pred_backward, validation_data$Loan_Status)
+mean(glm.pred_backward != validation_data$Loan_Status)
+pred_backward<-prediction(as.numeric(glm.pred_backward), as.numeric(validation_data$Loan_Status))
+perf_backward<-performance(pred_backward,"tpr", "fpr")
+plot(perf_backward)
+auc_backward<- performance(pred_backward,"auc")
+auc_backward
+
+#Forward stepwise model
+glm_forward <-  step(glm_nothing, scope=list(lower=formula(glm_nothing),upper=formula(glm_fit)), direction="forward")
+summary(glm_forward)
+glm.probs_forward = predict(glm_forward, validation_data, type = "response")
+glm.pred_forward = rep("N", 120)
+glm.pred_forward[glm.probs_forward >.7] = "Y"
+glm.pred_forward = as.factor(glm.pred_forward)
+table(glm.pred_forward, validation_data$Loan_Status)
+mean(glm.pred_forward != validation_data$Loan_Status)
+pred_forward<-prediction(as.numeric(glm.pred_forward), as.numeric(validation_data$Loan_Status))
+perf_forward<-performance(pred_forward,"tpr", "fpr")
+plot(perf_forward)
+auc_forward<- performance(pred_forward,"auc")
+auc_forward
+
+#Bothways stepwise model
+glm_bothways = step(glm_nothing, list(lower=formula(glm_nothing),upper=formula(glm_fit)), direction="both", trace = 0)
+summary(glm_bothways)
+glm.probs_bothways = predict(glm_bothways, validation_data, type = "response")
+glm.pred_bothways = rep("N", 120)
+glm.pred_bothways[glm.probs_bothways >.7] = "Y"
+glm.pred_bothways = as.factor(glm.pred_bothways)
+table(glm.pred_bothways, validation_data$Loan_Status)
+mean(glm.pred_bothways != validation_data$Loan_Status)
+pred_bothways<-prediction(as.numeric(glm.pred_bothways), as.numeric(validation_data$Loan_Status))
+perf_bothways<-performance(pred_bothways,"tpr", "fpr")
+plot(perf_bothways)
+auc_bothways<- performance(pred_bothways,"auc")
+auc_bothways
+```
+
+As you can see from all the above models, the predictors which are significant in the loan eligibility process are Credit_History and Property_Area. To check the fitness of the above models, Area Under Curve(AUC) of the Receiver Operating Characteristic(ROC) curve was calculated for each model and it was found that AUC was maximum for the model which was developed using all the predictors. But as we can see from the coefficients of all the models, the significant predictors are Credit_History and Property_Area. This implies that a non linear transformation or an interaction of Credit_History and Property_Area might be possible. We will now create a model with non linear transformations of these predictors, check it's fitness and finally we will carry out the regression using knn approach and see how well it predicts the loan eligibility.
+
+```{r Non Linear GLM, echo = TRUE}
+#Model with non-linear transformation
+glm_nl_fit <- glm(Loan_Status ~ Credit_History + Property_Area + I(Credit_History^2), data = train_data, family = "binomial")
+summary(glm_nl_fit)
+glm.probs_nl = predict(glm_nl_fit, validation_data, type = "response")
+glm.pred_nl = rep("N", 120)
+glm.pred_nl[glm.probs_nl >.7] = "Y"
+glm.pred_nl = as.factor(glm.pred_nl)
+table(glm.pred_nl, validation_data$Loan_Status)
+mean(glm.pred_nl != validation_data$Loan_Status)
+pred_nl<-prediction(as.numeric(glm.pred_nl), as.numeric(validation_data$Loan_Status))
+perf_nl<-performance(pred_nl,"tpr", "fpr")
+plot(perf_nl)
+auc_nl<- performance(pred_nl,"auc")
+auc_nl
+
+#Model with interaction term
+glm_int_fit <- glm(Loan_Status ~ Credit_History + Property_Area + Credit_History:Property_Area, data = train_data, family = "binomial")
+summary(glm_int_fit)
+glm.probs_int = predict(glm_int_fit, validation_data, type = "response")
+glm.pred_int = rep("N", 120)
+glm.pred_int[glm.probs_int >.7] = "Y"
+glm.pred_int = as.factor(glm.pred_int)
+table(glm.pred_int, validation_data$Loan_Status)
+mean(glm.pred_int != validation_data$Loan_Status)
+pred_int<-prediction(as.numeric(glm.pred_int), as.numeric(validation_data$Loan_Status))
+perf_int<-performance(pred_int,"tpr", "fpr")
+plot(perf_int)
+auc_int<- performance(pred_int,"auc")
+auc_int
+```
+
+As we can see the interaction terms and non-linear transformations does not increase the AUC of the ROC curve. Now we will develop a knn model and check it's fitness.
+
+##GLM model using caret package
+
+```{r caret GLM, echo = TRUE}
+#GLM using caret package
+repeats = 3
+numbers = 10
+tunel = 10
+
+set.seed(1234)
+x = trainControl(method = 'repeatedcv',
+                 number = numbers,
+                 repeats = repeats,
+                 classProbs = TRUE,
+                 summaryFunction = twoClassSummary)
+
+model1 <- train(Loan_Status~Credit_History+Property_Area , data = train_data, method = 'glm',
+                preProcess = c('center','scale'),
+                trControl = x,
+                metric = 'ROC',
+                tuneLength = tunel)
+#summary
+model1
+
+#Validation
+valid_pred <- predict(model1, validation_data, type = 'prob')
+
+#Storing Model Performance Scores
+pred_val <-prediction(valid_pred[,2],validation_data$Loan_Status)
+
+# Calculating Area under Curve (AUC)
+perf_val <- performance(pred_val,'auc')
+perf_val
+
+# Plot AUC
+perf_val <- performance(pred_val, 'tpr', 'fpr')
+plot(perf_val, col = 'green', lwd = 1.5)
+```
+
+The GLM model using caret function gives the maximum AUC (.78) among all the GLMs.
+
+Now we will develop knn model using knn function and knn model using caret package and compare their AUC with the GLM model developed using caret package.
+
+##KNN models
+```{r KNN, echo = TRUE}
+#Converting all predictors to Numeric
+loan_train$Property_Area <- as.numeric(as.factor(loan_train$Property_Area))
+train_knn = cbind(loan_train$Credit_History, loan_train$Property_Area)[index,]
+test_knn = cbind(loan_train$Credit_History, loan_train$Property_Area)[-index,]
+train.Loan_Status <- loan_train$Loan_Status[index]
+
+set.seed(1)
+knn.pred = knn(train = train_knn, test = test_knn, cl = train.Loan_Status, k=1)
+table(knn.pred, validation_data$Loan_Status)
+pred_knn<-prediction(as.numeric(knn.pred), as.numeric(validation_data$Loan_Status))
+perf_knn<-performance(pred_knn,"tpr", "fpr")
+plot(perf_knn)
+auc_knn<- performance(pred_knn,"auc")
+auc_knn
+
+#knn approach using caret
+#Setting up train controls
+repeats2 = 3
+numbers2 = 10
+tunel2 = 10
+
+set.seed(1234)
+x1 = trainControl(method = 'repeatedcv',
+                 number = numbers2,
+                 repeats = repeats2,
+                 classProbs = TRUE,
+                 summaryFunction = twoClassSummary)
+
+model2 <- train(Loan_Status~Credit_History+Property_Area , data = train_data, method = 'knn',
+                preProcess = c('center','scale'),
+                trControl = x1,
+                metric = 'ROC',
+                tuneLength = tunel2)
+
+# Summary of model
+model2
+
+# Validation
+valid_pred2 <- predict(model2, validation_data, type = 'prob')
+
+#Storing Model Performance Scores
+pred_val2 <-prediction(valid_pred2[,2],validation_data$Loan_Status)
+
+# Calculating Area under Curve (AUC)
+perf_val2 <- performance(pred_val2,'auc')
+perf_val2
+
+# Plot AUC
+perf_val2 <- performance(pred_val2, 'tpr', 'fpr')
+plot(perf_val2, col = 'green', lwd = 1.5)
+```
+
+The AUC of KNN model using knn() function is same as that of full GLM model (.75). The AUC of KNN model using caret package is same as that of GLM model developed using caret package.
+
+Now we can use any one of the GLM model or KNN model using caret package to predict the Loan_Status of the given test data. Here we are using KNN model.
+
+##Predicting Loan Status for Test Data
+```{r Predict Loan_Status, echo = TRUE}
+#prediction using knn
+loan_test <- fread("Test_data.csv")
+valid_pred <- predict(model1,loan_test, type = 'prob')
+knn.pred <- rep("N" ,367)
+knn.pred[valid_pred[,2] >.7] <- "Y"
+loan_test$Loan_Status_Pred <- knn.pred
+View(loan_test)
+```

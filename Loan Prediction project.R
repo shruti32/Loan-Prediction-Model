@@ -18,7 +18,7 @@ if(!require(car)) {install.packages("car"); require(car)}
 if(!require(outliers)) {install.packages("outliers"); require(outliers)}
 if(!require(rapportools)) {install.packages("rapportools"); require(rapportools)}
 if(!require(boot)) {install.packages("boot"); require(boot)}
-loan_train <- fread("Train_data.csv", na.string = "NA", stringsAsFactors = TRUE)
+loan_train <- fread("Train_data.csv", na.string = c("NA",""), stringsAsFactors = TRUE)
 loan_train = loan_train[,-1]
 
 ##percentage of missing values in each columns, so we can decide whether to remove missing values or not
@@ -96,7 +96,7 @@ glm.probs = predict(glm.fit, validation_data, type = "response")
 contrasts(validation_data$Loan_Status)
 dim(validation_data)
 
-glm.pred = rep("N", 133)
+glm.pred = rep("N", 120)
 glm.pred[glm.probs >.7] = "Y"
 glm.pred = as.factor(glm.pred)
 table(glm.pred, validation_data$Loan_Status)
@@ -271,9 +271,29 @@ model1 <- train(Loan_Status~Credit_History+Property_Area , data = train_data, me
                 metric = 'ROC',
                 tuneLength = tunel)
 
+repeats = 3
+numbers = 10
+tunel = 10
+
+set.seed(1234)
+x1 = trainControl(method = 'repeatedcv',
+                 number = numbers,
+                 repeats = repeats,
+                 classProbs = TRUE,
+                 summaryFunction = twoClassSummary)
+
+model2 <- train(Loan_Status~Credit_History+Property_Area , data = train_data, method = 'glm',
+                preProcess = c('center','scale'),
+                trControl = x1,
+                metric = 'ROC',
+                tuneLength = tunel)
+
 # Summary of model
 model1
 plot(model1)
+
+model2
+plot(model2)
 
 # Validation
 valid_pred <- predict(model1, validation_data, type = 'prob')
@@ -293,13 +313,10 @@ plot(perf_val, col = 'green', lwd = 1.5)
 ##Validation on the given test set using knn model
 #KNN model with two predictors (Credit_History and Property_Area) and for k=23 resulted in the 
 #best AUC of the ROC Curve, therefore using "model1" to predict values for the given test data
-loan_test <- data.table::fread("C:/Users/shrut/OneDrive/Documents/Loan Prediction/Test_data.csv")
-loan_test <- as.data.frame(loan_test)
-loan_test <- na.omit(loan_test)
-loan_test <- loan_test[!duplicated(loan_test),]
+loan_test <- fread("Test_data.csv")
 
-valid_pred <- predict(model1,loan_test, type = 'prob')
+valid_pred <- predict(glm_fit,loan_test, type = "response")
 
-knn.pred <- rep("N" ,328)
-knn.pred[valid_pred[,2] >.7] <- "Y"
+knn.pred <- rep("N" ,367)
+knn.pred[glm.probs >.7] <- "Y"
 loan_test$Loan_Status_Pred <- knn.pred
