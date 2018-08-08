@@ -331,4 +331,5 @@ knn.pred <- rep("N" ,367)
 knn.pred[valid_pred[,2] >.7] <- "Y"
 loan_test$Loan_Status_Pred <- knn.pred
 View(loan_test)
+write.csv(loan_test, "Predicted_data.csv")
 ```
